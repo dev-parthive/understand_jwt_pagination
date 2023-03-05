@@ -4,7 +4,9 @@ const cors = require('cors')
 require('dotenv').config()
 require('colors')
 const port = process.env.PORT || 3000;
+const { MongoClient, ServerApiVersion } = require('mongodb');
 const jwt = require('jsonwebtoken')
+const auth = require('./middleware/verifyJWT')
 
 
 // middleware
@@ -43,8 +45,9 @@ app.get("/test", (req, res) =>{
 
 })
 
+
+
 // connect mongodb 
-const { MongoClient, ServerApiVersion } = require('mongodb');
 const { urlencoded } = require('express')
 const uri = `${process.env.DB_URL}`;
 const client = new MongoClient(uri, { useNewUrlParser: true, 
@@ -75,8 +78,9 @@ client.connect((err)=>{
         //our databse is connected
         console.log("Database is connected".blue)
         const db = client.db("JWT")
+        const usersCollection = db.collection('userCollection')
         //ROUTES
-        app.get('/users', async(req, res)=>{
+        app.get('/users', auth, async(req, res)=>{
            try{
             const users = await db.collection("userCollection").find().toArray()
             res.json({
@@ -149,14 +153,14 @@ client.connect((err)=>{
         app.post("/login", async(req, res)=>{
             try{
                 const {email, password } = req.body;
-                console.log(email, password);
+                console.log(req.body);
                 if(!email || !password){
                     return res.send({
                         status: "error", 
                         message: "please provide all the values"
                     })
                 }
-                const usersCollection = db.collection('userCollection')
+          
                 const user = await usersCollection.findOne({
                     email, 
                     password
@@ -167,12 +171,9 @@ client.connect((err)=>{
                     console.log("no user found");
                     return res.send({
                         status: "error", 
-                        message: "Invalid Credantials"
+                        message: "User doesn't exist"
                     })
                 }
-
-
-
                 /**
                  * validate body
                  * find the user 
@@ -198,6 +199,23 @@ client.connect((err)=>{
                     status: "error"
                 })
             }
+        })
+
+        // ----paginated user ----- 
+        app.get('/p-user', async(req, res) =>{
+            /**
+             * 1.Take query params from the users -> limit, page 
+             * 2.Run query 
+             */
+            const limit = Number(req.query.limit) || 10 
+            console.log(limit)
+            const page = Number(req.query.page) || 1;  
+            console.log(page)
+            const users = await usersCollection.find({}).limit(limit).skip(limit * page).toArray()
+            res.send({
+                status: "success", 
+                data: users
+            })
         })
     }
 })
